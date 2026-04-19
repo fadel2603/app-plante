@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/colors';
+import { FontFamily } from '@/constants/fonts';
 import { PLANTS } from '@/constants/data';
 
 const CARE_TIMELINE = [
@@ -21,10 +24,20 @@ const CARE_TIMELINE = [
   { date: 'Il y a 14 jours', action: 'Arrosage effectué', icon: 'water', color: '#4FC3F7' },
 ];
 
+const MOCK_PHOTOS = [
+  'https://images.unsplash.com/photo-1545241047-6083a3684587?w=200',
+  'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=200',
+  'https://images.unsplash.com/photo-1509423350716-97f9360b4e09?w=200',
+];
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+
 export default function PlantDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const plant = PLANTS.find(p => p.id === id) ?? PLANTS[0];
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -48,6 +61,12 @@ export default function PlantDetailScreen() {
             <View style={styles.infoMain}>
               <Text style={styles.plantName}>{plant.name}</Text>
               <Text style={styles.species}>{plant.species}</Text>
+              <Text style={styles.meta}>
+                Ajoutée il y a 2 mois · Intérieur ·{' '}
+                <Text style={styles.metaPhotos} onPress={() => setGalleryOpen(true)}>
+                  3 📸
+                </Text>
+              </Text>
             </View>
             <TouchableOpacity
               style={styles.scanBtn}
@@ -93,6 +112,37 @@ export default function PlantDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Gallery modal */}
+      <Modal visible={galleryOpen} transparent animationType="slide" onRequestClose={() => setGalleryOpen(false)}>
+        <View style={styles.galleryModal}>
+          <View style={styles.galleryModalHeader}>
+            <Text style={styles.galleryModalTitle}>Mes photos</Text>
+            <TouchableOpacity onPress={() => setGalleryOpen(false)}>
+              <Ionicons name="close" size={24} color={Colors.textDark} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.galleryGrid}>
+            {MOCK_PHOTOS.map((uri, i) => (
+              <TouchableOpacity key={i} onPress={() => { setFullscreenPhoto(uri); }} activeOpacity={0.85}>
+                <Image source={{ uri }} style={styles.galleryGridThumb} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Fullscreen photo */}
+      <Modal visible={!!fullscreenPhoto} transparent animationType="fade" onRequestClose={() => setFullscreenPhoto(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setFullscreenPhoto(null)}>
+          {fullscreenPhoto && (
+            <Image source={{ uri: fullscreenPhoto }} style={styles.fullscreenImg} resizeMode="contain" />
+          )}
+          <TouchableOpacity style={styles.closeBtn} onPress={() => setFullscreenPhoto(null)}>
+            <Ionicons name="close" size={22} color={Colors.white} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -148,15 +198,26 @@ const styles = StyleSheet.create({
   },
   infoMain: { flex: 1 },
   plantName: {
+    fontFamily: FontFamily.titleDisplay,
     fontSize: 28,
-    fontWeight: '800',
     color: Colors.textDark,
   },
   species: {
+    fontFamily: FontFamily.bodyRegular,
     fontSize: 14,
     color: Colors.textMuted,
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  meta: {
+    fontFamily: FontFamily.bodyRegular,
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 5,
+  },
+  metaPhotos: {
+    color: Colors.textDark,
+    fontFamily: FontFamily.calendarBold,
   },
   scanBtn: {
     flexDirection: 'row',
@@ -168,14 +229,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   scanBtnText: {
+    fontFamily: FontFamily.calendarBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.textDark,
   },
   statsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   statCard: {
     flex: 1,
@@ -191,19 +252,55 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   statValue: {
+    fontFamily: FontFamily.calendarBold,
     fontSize: 13,
-    fontWeight: '700',
     color: Colors.textDark,
     textAlign: 'center',
   },
   statLabel: {
+    fontFamily: FontFamily.bodyRegular,
     fontSize: 11,
     color: Colors.textMuted,
     textAlign: 'center',
   },
+
+  /* Gallery modal */
+  galleryModal: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    marginTop: 60,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  galleryModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    paddingBottom: 12,
+  },
+  galleryModalTitle: {
+    fontFamily: FontFamily.headerBold,
+    fontSize: 20,
+    color: Colors.textDark,
+  },
+  galleryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    padding: 16,
+  },
+  galleryGridThumb: {
+    width: (SCREEN_W - 48) / 3,
+    height: (SCREEN_W - 48) / 3,
+    borderRadius: 12,
+    backgroundColor: Colors.border,
+  },
+
+  /* Timeline */
   timelineTitle: {
+    fontFamily: FontFamily.headerBold,
     fontSize: 18,
-    fontWeight: '700',
     color: Colors.textDark,
     marginBottom: 16,
   },
@@ -235,13 +332,37 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   timelineAction: {
+    fontFamily: FontFamily.calendarBold,
     fontSize: 14,
-    fontWeight: '600',
     color: Colors.textDark,
   },
   timelineDate: {
+    fontFamily: FontFamily.bodyRegular,
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 2,
+  },
+
+  /* Fullscreen modal */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullscreenImg: {
+    width: SCREEN_W,
+    height: SCREEN_H,
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

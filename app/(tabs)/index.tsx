@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   greeting: {
-    fontFamily: FontFamily.headerBold,
+    fontFamily: FontFamily.titleDisplay,
     fontSize: 28,
     color: Colors.textDark,
     lineHeight: 34,

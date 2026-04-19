@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   },
   // Figma: Gabarito SemiBold ~32px for screen title
   title: {
-    fontFamily: FontFamily.nameSemiBold,
+    fontFamily: FontFamily.titleDisplay,
     fontSize: 32,
     color: Colors.textDark,
   },

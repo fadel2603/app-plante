@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-na
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/colors';
+import { FontFamily } from '@/constants/fonts';
 
 export default function ScannerScreen() {
   const router = useRouter();
@@ -49,8 +50,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
+    fontFamily: FontFamily.titleDisplay,
     fontSize: 24,
-    fontWeight: '800',
     color: Colors.textDark,
     textAlign: 'center',
   },
