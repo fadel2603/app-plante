@@ -29,7 +29,15 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        { "cameraPermission": "Planta a besoin de la caméra pour identifier vos plantes." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Planta accède à vos photos pour ajouter vos plantes." }
+      ]
     ]
   }
 }

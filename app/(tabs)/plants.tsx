@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,26 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '@/constants/colors';
 import { FontFamily } from '@/constants/fonts';
 import { PLANTS } from '@/constants/data';
+import AddPlantSheet from '@/components/AddPlantSheet';
 
 export default function PlantsScreen() {
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
+  const [addSheetVisible, setAddSheetVisible] = useState(false);
+
+  const handleGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      router.push({ pathname: '/add-plant/analyzing', params: { photo: result.assets[0].uri } } as any);
+    }
+  };
 
   const titleOpacity = scrollY.interpolate({
     inputRange: [0, 50],
@@ -47,7 +60,7 @@ export default function PlantsScreen() {
             </Animated.Text>
             <Text style={styles.subtitle}>{PLANTS.length} plantes suivies</Text>
           </View>
-          <TouchableOpacity style={styles.addBtn}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setAddSheetVisible(true)}>
             <Ionicons name="add" size={22} color={Colors.textDark} />
           </TouchableOpacity>
         </View>
@@ -90,6 +103,13 @@ export default function PlantsScreen() {
 
         <View style={{ height: 120 }} />
       </Animated.ScrollView>
+
+      <AddPlantSheet
+        visible={addSheetVisible}
+        onClose={() => setAddSheetVisible(false)}
+        onCamera={() => router.push('/add-plant/camera' as any)}
+        onGallery={handleGallery}
+      />
 
       {/* Top fade gradient */}
       <LinearGradient

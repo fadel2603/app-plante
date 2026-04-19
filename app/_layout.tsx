@@ -44,6 +44,9 @@ export default function RootLayout() {
         <Stack.Screen name="plant/[id]" options={{ presentation: 'card' }} />
         <Stack.Screen name="scan-result" options={{ presentation: 'card' }} />
         <Stack.Screen name="recommendation" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="add-plant/camera" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="add-plant/analyzing" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+        <Stack.Screen name="add-plant/result" options={{ presentation: 'fullScreenModal' }} />
       </Stack>
     </GestureHandlerRootView>
   );
