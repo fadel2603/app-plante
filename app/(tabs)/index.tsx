@@ -1,18 +1,26 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
+  Animated,
   TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  Easing,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/colors';
 import { FontFamily } from '@/constants/fonts';
 import CalendarStrip from '@/components/CalendarStrip';
 import TaskItem from '@/components/TaskItem';
-import { TODAY_TASKS, Task } from '@/constants/data';
+import PlantPreviewSheet from '@/components/PlantPreviewSheet';
+import { TASKS_BY_DAY, Task, PLANTS } from '@/constants/data';
+
+const SCREEN_W = Dimensions.get('window').width;
+const SLIDE_DIST = SCREEN_W * 0.35;
+const ANIM_DURATION = 250;
 
 type GroupConfig = {
   type: Task['type'];
@@ -23,41 +31,116 @@ type GroupConfig = {
 };
 
 const GROUPS: GroupConfig[] = [
-  {
-    type: 'water',
-    label: 'Arroser',
-    iconName: 'water',
-    iconColor: '#2196F3',
-    iconBg: Colors.waterIconBg,   // #ACE2F2
-  },
-  {
-    type: 'observe',
-    label: 'Observer',
-    iconName: 'eye',
-    iconColor: '#2E7D32',
-    iconBg: '#C8E6C9',            // vert clair
-  },
+  { type: 'water',   label: 'Arroser',  iconName: 'water', iconColor: '#2196F3', iconBg: Colors.waterIconBg },
+  { type: 'observe', label: 'Observer', iconName: 'eye',   iconColor: '#2E7D32', iconBg: '#C8E6C9' },
 ];
 
+function getTasksForDate(date: Date): Task[] {
+  const day = date.getDay();
+  return (TASKS_BY_DAY[day] ?? []).map(t => ({ ...t }));
+}
+
 export default function HomeScreen() {
-  const [tasks, setTasks] = useState<Task[]>(TODAY_TASKS);
+  const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [tasks, setTasks] = useState<Task[]>(getTasksForDate(today));
+
+  const [previewTask, setPreviewTask] = useState<Task | null>(null);
+  const previewPlant = previewTask ? PLANTS.find(p => p.id === previewTask.plantId) ?? null : null;
+
+  const scrollY      = useRef(new Animated.Value(0)).current;
+  const translateX   = useRef(new Animated.Value(0)).current;
+  const opacity      = useRef(new Animated.Value(1)).current;
+  const todayBtnOpacity = useRef(new Animated.Value(0)).current;
 
   const toggle = (id: string) =>
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, done: !t.done } : t)));
 
   const doneCnt = tasks.filter(t => t.done).length;
 
+  const handleDateChange = (newDate: Date, skipAnim?: boolean) => {
+    const isToday = isSameDay(newDate, today);
+    Animated.timing(todayBtnOpacity, {
+      toValue: isToday ? 0 : 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+
+    const direction = newDate > selectedDate ? 1 : -1; // 1=future/right, -1=past/left
+
+    // Animate out current content
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: ANIM_DURATION / 2,
+        useNativeDriver: true,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      Animated.timing(translateX, {
+        toValue: -direction * SLIDE_DIST * 0.4,
+        duration: ANIM_DURATION / 2,
+        useNativeDriver: true,
+        easing: Easing.inOut(Easing.ease),
+      }),
+    ]).start(() => {
+      // Swap content while invisible
+      setSelectedDate(newDate);
+      setTasks(getTasksForDate(newDate));
+      translateX.setValue(direction * SLIDE_DIST);
+
+      // Animate in new content
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: ANIM_DURATION,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(translateX, {
+          toValue: 0,
+          duration: ANIM_DURATION,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ]).start();
+    });
+  };
+
+  const titleOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const isSameDay = (a: Date, b: Date) =>
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear();
+
+  const sectionLabel = isSameDay(selectedDate, today)
+    ? 'Aujourd\'hui'
+    : selectedDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' });
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      <Animated.ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
       >
         {/* ── HEADER ── */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Bonjour 👋</Text>
+            <Animated.Text style={[styles.greeting, { opacity: titleOpacity }]}>
+              Bonjour 👋
+            </Animated.Text>
             <Text style={styles.subtitle}>Tes plantes t'attendent</Text>
           </View>
           <TouchableOpacity style={styles.notifBtn} activeOpacity={0.7}>
@@ -66,75 +149,111 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── CALENDRIER dans card blanche ── */}
+        {/* ── CALENDRIER ── */}
         <View style={styles.calendarCard}>
-          <CalendarStrip />
+          <Animated.View style={[styles.todayBtn, { opacity: todayBtnOpacity }]} pointerEvents={isSameDay(selectedDate, today) ? 'none' : 'auto'}>
+            <TouchableOpacity onPress={() => handleDateChange(new Date())} activeOpacity={0.7}>
+              <Text style={styles.todayBtnText}>Aujourd'hui</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          <CalendarStrip onDateChange={handleDateChange} value={selectedDate} />
         </View>
 
-        {/* ── TÂCHES DU JOUR ── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Aujourd'hui</Text>
-          <View style={styles.progressPill}>
-            <Text style={styles.progressText}>{doneCnt}/{tasks.length} fait</Text>
-          </View>
-        </View>
-
-        {/* Barre de progression */}
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${tasks.length ? (doneCnt / tasks.length) * 100 : 0}%` },
-            ]}
-          />
-        </View>
-
-        {/* ── GROUPES ── */}
-        <View style={styles.groups}>
-          {GROUPS.map(group => {
-            const groupTasks = tasks.filter(t => t.type === group.type);
-            if (!groupTasks.length) return null;
-            return (
-              <View key={group.type} style={styles.group}>
-                {/* En-tête de groupe */}
-                <View style={styles.groupHeader}>
-                  <View style={[styles.groupIcon, { backgroundColor: group.iconBg }]}>
-                    <Ionicons name={group.iconName} size={17} color={group.iconColor} />
-                  </View>
-                  <Text style={styles.groupLabel}>{group.label}</Text>
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countText}>{groupTasks.length}</Text>
-                  </View>
-                </View>
-                {/* Cards tâches */}
-                <View style={styles.taskList}>
-                  {groupTasks.map(t => (
-                    <TaskItem key={t.id} task={t} onToggle={toggle} />
-                  ))}
-                </View>
+        {/* ── BLOC TÂCHES ANIMÉ ── */}
+        <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+          {/* Section header */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{sectionLabel}</Text>
+            {tasks.length > 0 && (
+              <View style={styles.progressPill}>
+                <Text style={styles.progressText}>{doneCnt}/{tasks.length} fait</Text>
               </View>
-            );
-          })}
-        </View>
+            )}
+          </View>
+
+          {/* Barre de progression */}
+          {tasks.length > 0 && (
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${(doneCnt / tasks.length) * 100}%` },
+                ]}
+              />
+            </View>
+          )}
+
+          {/* Groupes */}
+          {tasks.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Aucune tâche ce jour 🌿</Text>
+            </View>
+          ) : (
+            <View style={styles.groups}>
+              {GROUPS.map(group => {
+                const groupTasks = tasks.filter(t => t.type === group.type);
+                if (!groupTasks.length) return null;
+                return (
+                  <View key={group.type} style={styles.group}>
+                    <View style={styles.groupHeader}>
+                      <View style={[styles.groupIcon, { backgroundColor: group.iconBg }]}>
+                        <Ionicons name={group.iconName} size={17} color={group.iconColor} />
+                      </View>
+                      <Text style={styles.groupLabel}>{group.label}</Text>
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countText}>{groupTasks.length}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.taskList}>
+                      {groupTasks.map(t => (
+                        <TaskItem
+                          key={t.id}
+                          task={t}
+                          onToggle={toggle}
+                          onPhotoPress={setPreviewTask}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </Animated.View>
 
         <View style={{ height: 120 }} />
-      </ScrollView>
-    </SafeAreaView>
+      </Animated.ScrollView>
+
+      <PlantPreviewSheet
+        plant={previewPlant}
+        taskType={previewTask?.type}
+        onClose={() => setPreviewTask(null)}
+      />
+
+      {/* Top fade gradient */}
+      <LinearGradient
+        colors={['rgba(245,247,240,0.3)', 'transparent']}
+        style={styles.topGradient}
+        pointerEvents="none"
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.background,  // #F5F7F0
-  },
+  root: { flex: 1, backgroundColor: Colors.background },
   scroll: { flex: 1 },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
+  content: { paddingHorizontal: 20, paddingTop: 60 },
+
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 35,
+    zIndex: 10,
   },
 
-  /* Header */
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -178,7 +297,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.white,
   },
 
-  /* Calendrier card blanche */
   calendarCard: {
     backgroundColor: Colors.white,
     borderRadius: 20,
@@ -190,8 +308,22 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  todayBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    zIndex: 1,
+    backgroundColor: '#E8F5E0',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  todayBtnText: {
+    fontFamily: FontFamily.calendarMedium,
+    fontSize: 12,
+    color: Colors.textDark,
+  },
 
-  /* Titre section */
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -215,7 +347,6 @@ const styles = StyleSheet.create({
     color: Colors.textDark,
   },
 
-  /* Barre progression */
   progressBar: {
     height: 5,
     backgroundColor: Colors.white,
@@ -229,9 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  /* Groupes */
   groups: { gap: 16 },
-
   group: {
     backgroundColor: '#E8EDE4',
     borderRadius: 20,
@@ -246,7 +375,7 @@ const styles = StyleSheet.create({
   groupIcon: {
     width: 34,
     height: 34,
-    borderRadius: 17,          // cercle
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -270,6 +399,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
-
   taskList: { gap: 8 },
+
+  emptyState: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontFamily: FontFamily.bodyRegular,
+    fontSize: 15,
+    color: Colors.textMuted,
+  },
 });

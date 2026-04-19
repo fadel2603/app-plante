@@ -18,17 +18,24 @@ function buildWeekDays(anchor: Date) {
   return days;
 }
 
-type Props = { onDateChange?: (date: Date) => void };
+type Props = { onDateChange?: (date: Date) => void; value?: Date };
 
-export default function CalendarStrip({ onDateChange }: Props) {
-  const [selected, setSelected] = useState(new Date());
-  const days = buildWeekDays(selected);
+export default function CalendarStrip({ onDateChange, value }: Props) {
+  const [selected, setSelected] = useState(value ?? new Date());
   const today = new Date();
 
   const isSameDay = (a: Date, b: Date) =>
     a.getDate() === b.getDate() &&
     a.getMonth() === b.getMonth() &&
     a.getFullYear() === b.getFullYear();
+
+  React.useEffect(() => {
+    if (value && !isSameDay(value, selected)) {
+      setSelected(value);
+    }
+  }, [value]);
+
+  const days = buildWeekDays(selected);
 
   const handleSelect = (d: Date) => {
     setSelected(d);

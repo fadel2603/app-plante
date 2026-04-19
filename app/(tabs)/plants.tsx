@@ -1,33 +1,50 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  Animated,
   Image,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/colors';
 import { FontFamily } from '@/constants/fonts';
 import { PLANTS } from '@/constants/data';
 
 export default function PlantsScreen() {
   const router = useRouter();
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  const titleOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      <Animated.ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
       >
-        {/* Header — Figma: "Mes plantes 🪴" Gabarito SemiBold 29px */}
+        {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Mes plantes 🪴</Text>
+            <Animated.Text style={[styles.title, { opacity: titleOpacity }]}>
+              Mes plantes 🪴
+            </Animated.Text>
             <Text style={styles.subtitle}>{PLANTS.length} plantes suivies</Text>
           </View>
           <TouchableOpacity style={styles.addBtn}>
@@ -35,7 +52,7 @@ export default function PlantsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Plant cards — Figma: bg white, border #ececec, rounded-24, shadow 4 4 28 4 rgba(0,0,0,0.07) */}
+        {/* Plant cards */}
         <View style={styles.list}>
           {PLANTS.map(plant => (
             <TouchableOpacity
@@ -44,29 +61,24 @@ export default function PlantsScreen() {
               onPress={() => router.push(`/plant/${plant.id}` as any)}
               activeOpacity={0.88}
             >
-              {/* Hero image — Figma: 250px height, rounded-20 */}
               <View style={styles.imageWrap}>
                 <Image source={{ uri: plant.image }} style={styles.image} />
-                {/* Badge "Soin en cours" — Figma: bg #F8EACF, text #EB7C05, Satoshi Medium 16px */}
                 {plant.careStatus && (
                   <View style={styles.badge}>
                     <Ionicons name="heart-outline" size={14} color={Colors.orange} />
                     <Text style={styles.badgeText}>{plant.careStatus}</Text>
                   </View>
                 )}
-                {/* Favourite button — Figma: 36×36 circle top right */}
                 <TouchableOpacity style={styles.favBtn}>
                   <Ionicons name="heart-outline" size={18} color={Colors.textDark} />
                 </TouchableOpacity>
               </View>
 
-              {/* Name + species — centered, Figma: y=266, centered in card */}
               <View style={styles.nameBlock}>
                 <Text style={styles.plantName}>{plant.name}</Text>
                 <Text style={styles.species}>{plant.species}</Text>
               </View>
 
-              {/* Meta row — Figma: 3 text items with emoji */}
               <View style={styles.metaRow}>
                 <Text style={styles.metaText}>🌿 2 mois</Text>
                 <Text style={styles.metaText}>🏠 Intérieur</Text>
@@ -77,15 +89,32 @@ export default function PlantsScreen() {
         </View>
 
         <View style={{ height: 120 }} />
-      </ScrollView>
-    </SafeAreaView>
+      </Animated.ScrollView>
+
+      {/* Top fade gradient */}
+      <LinearGradient
+        colors={['rgba(245,247,240,0.3)', 'transparent']}
+        style={styles.topGradient}
+        pointerEvents="none"
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
+  root: { flex: 1, backgroundColor: Colors.background },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 12 },
+  content: { paddingHorizontal: 16, paddingTop: 60 },
+
+  /* Top fade */
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 35,
+    zIndex: 10,
+  },
 
   header: {
     flexDirection: 'row',
@@ -93,7 +122,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 20,
   },
-  // Figma: Gabarito SemiBold ~32px for screen title
   title: {
     fontFamily: FontFamily.titleDisplay,
     fontSize: 32,
@@ -116,7 +144,6 @@ const styles = StyleSheet.create({
 
   list: { gap: 16 },
 
-  // Figma: bg white, border #ececec, rounded-24, shadow 4 4 28 4 rgba(0,0,0,0.07), padding 8
   card: {
     backgroundColor: Colors.cardBg,
     borderRadius: 24,
@@ -130,7 +157,6 @@ const styles = StyleSheet.create({
     elevation: 4,
     gap: 16,
   },
-  // Figma: image 250px height, rounded-20
   imageWrap: {
     position: 'relative',
     borderRadius: 20,
@@ -142,7 +168,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.sectionBg,
     borderRadius: 20,
   },
-  // Figma: badge bg #F8EACF, text #EB7C05, rounded-8, top-left
   badge: {
     position: 'absolute',
     top: 13,
@@ -160,7 +185,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.orange,
   },
-  // Figma: favourite button top-right, bg #A6A7A7, rounded-full, 36×36
   favBtn: {
     position: 'absolute',
     top: 11,
@@ -172,7 +196,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Figma: centered, Gabarito SemiBold 29px + Urbanist Italic 16px
   nameBlock: {
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -191,7 +214,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
-  // Figma: 3 meta texts centered, gap ~89px, Urbanist 19px
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'center',

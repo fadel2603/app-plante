@@ -6,12 +6,15 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Modal,
   Dimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/colors';
 import { FontFamily } from '@/constants/fonts';
 import { PLANTS } from '@/constants/data';
@@ -31,30 +34,54 @@ const MOCK_PHOTOS = [
 ];
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const HERO_H = 360;
 
 export default function PlantDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const plant = PLANTS.find(p => p.id === id) ?? PLANTS[0];
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Hero */}
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
+        {/* Hero — full bleed behind status bar */}
         <View style={styles.heroWrapper}>
           <Image source={{ uri: plant.image }} style={styles.hero} />
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          {/* Bottom gradient */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.38)']}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 0, y: 1 }}
+          />
+          {/* Top gradient */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.4)', 'transparent']}
+            style={styles.heroGradientTop}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+          />
+          {/* Back button */}
+          <TouchableOpacity
+            style={[styles.backBtn, { top: insets.top + 10 }]}
+            onPress={() => router.back()}
+          >
             <Ionicons name="chevron-back" size={22} color={Colors.textDark} />
           </TouchableOpacity>
+          {/* Badge */}
           {plant.careStatus && (
-            <View style={styles.badge}>
+            <View style={[styles.badge, { top: insets.top + 10 }]}>
               <Text style={styles.badgeText}>{plant.careStatus}</Text>
             </View>
           )}
         </View>
 
+        {/* Body */}
         <View style={styles.body}>
           {/* Plant info */}
           <View style={styles.infoRow}>
@@ -124,7 +151,7 @@ export default function PlantDetailScreen() {
           </View>
           <ScrollView contentContainerStyle={styles.galleryGrid}>
             {MOCK_PHOTOS.map((uri, i) => (
-              <TouchableOpacity key={i} onPress={() => { setFullscreenPhoto(uri); }} activeOpacity={0.85}>
+              <TouchableOpacity key={i} onPress={() => setFullscreenPhoto(uri)} activeOpacity={0.85}>
                 <Image source={{ uri }} style={styles.galleryGridThumb} />
               </TouchableOpacity>
             ))}
@@ -138,28 +165,41 @@ export default function PlantDetailScreen() {
           {fullscreenPhoto && (
             <Image source={{ uri: fullscreenPhoto }} style={styles.fullscreenImg} resizeMode="contain" />
           )}
-          <TouchableOpacity style={styles.closeBtn} onPress={() => setFullscreenPhoto(null)}>
+          <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 8 }]} onPress={() => setFullscreenPhoto(null)}>
             <Ionicons name="close" size={22} color={Colors.white} />
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
+  root: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scroll: {
+    flex: 1,
+  },
   heroWrapper: {
+    height: HERO_H,
     position: 'relative',
   },
   hero: {
     width: '100%',
-    height: 320,
+    height: HERO_H,
     backgroundColor: Colors.border,
+  },
+  heroGradientTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
   },
   backBtn: {
     position: 'absolute',
-    top: 16,
     left: 16,
     width: 40,
     height: 40,
@@ -169,13 +209,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 4,
   },
   badge: {
     position: 'absolute',
-    top: 16,
     right: 16,
     backgroundColor: Colors.orange,
     paddingHorizontal: 12,
@@ -356,7 +395,6 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: 'absolute',
-    top: 52,
     right: 20,
     width: 40,
     height: 40,

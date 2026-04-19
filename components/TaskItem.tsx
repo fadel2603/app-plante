@@ -8,19 +8,21 @@ import { Task, PLANTS } from '@/constants/data';
 type Props = {
   task: Task;
   onToggle: (id: string) => void;
+  onPhotoPress?: (task: Task) => void;
 };
 
-export default function TaskItem({ task, onToggle }: Props) {
+export default function TaskItem({ task, onToggle, onPhotoPress }: Props) {
   const plant = PLANTS.find(p => p.id === task.plantId);
 
   return (
-    <TouchableOpacity
-      style={[styles.row, task.done && styles.rowDone]}
-      onPress={() => onToggle(task.id)}
-      activeOpacity={0.75}
-    >
-      {/* Photo plante — 60×60 arrondie */}
-      <View style={styles.photoWrap}>
+    <View style={[styles.row, task.done && styles.rowDone]}>
+      {/* Photo plante — tap ouvre aperçu */}
+      <TouchableOpacity
+        style={styles.photoWrap}
+        onPress={() => onPhotoPress?.(task)}
+        activeOpacity={0.8}
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 0 }}
+      >
         {plant?.image ? (
           <Image source={{ uri: plant.image }} style={styles.photo} />
         ) : (
@@ -28,10 +30,14 @@ export default function TaskItem({ task, onToggle }: Props) {
             <Ionicons name="leaf" size={22} color={Colors.textMuted} />
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
-      {/* Nom + heure */}
-      <View style={styles.info}>
+      {/* Nom + heure — tap coche/décoche */}
+      <TouchableOpacity
+        style={styles.infoTouch}
+        onPress={() => onToggle(task.id)}
+        activeOpacity={0.6}
+      >
         <Text style={[styles.plantName, task.done && styles.textDone]} numberOfLines={1}>
           {task.plantName}
         </Text>
@@ -40,9 +46,9 @@ export default function TaskItem({ task, onToggle }: Props) {
             {task.time}
           </Text>
         )}
-      </View>
+      </TouchableOpacity>
 
-      {/* Checkbox ronde — Figma: 35×35, border 1.8px #123601 */}
+      {/* Checkbox */}
       <TouchableOpacity
         style={[styles.checkbox, task.done && styles.checkboxDone]}
         onPress={() => onToggle(task.id)}
@@ -52,7 +58,7 @@ export default function TaskItem({ task, onToggle }: Props) {
           <Ionicons name="checkmark" size={16} color={Colors.textDark} />
         )}
       </TouchableOpacity>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -91,7 +97,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  info: { flex: 1 },
+  infoTouch: { flex: 1 },
   plantName: {
     fontFamily: FontFamily.nameSemiBold,
     fontSize: 16,
@@ -125,6 +131,6 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   checkboxDone: {
-    backgroundColor: Colors.checkDoneBg,  // #DBFFA5
+    backgroundColor: Colors.checkDoneBg,
   },
 });

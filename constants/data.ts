@@ -65,3 +65,42 @@ export const TODAY_TASKS: Task[] = [
   { id: 't3', plantId: '2', plantName: 'Pothos', type: 'observe', done: true, time: '12:00' },
   { id: 't4', plantId: '3', plantName: 'Ficus', type: 'observe', done: false, time: '12:00' },
 ];
+
+// Tasks indexed by day of week (0=Sun, 1=Mon, ..., 6=Sat)
+export const TASKS_BY_DAY: Record<number, Task[]> = {
+  0: [ // Dimanche
+    { id: 'd0t1', plantId: '1', plantName: 'Monstera', type: 'water', done: false, time: '08:00' },
+    { id: 'd0t2', plantId: '4', plantName: 'Cactus', type: 'water', done: false, time: '08:00' },
+    { id: 'd0t3', plantId: '2', plantName: 'Pothos', type: 'observe', done: false, time: '12:00' },
+    { id: 'd0t4', plantId: '3', plantName: 'Ficus', type: 'observe', done: false, time: '12:00' },
+  ],
+  1: [ // Lundi
+    { id: 'd1t1', plantId: '2', plantName: 'Pothos', type: 'water', done: false, time: '09:00' },
+    { id: 'd1t2', plantId: '3', plantName: 'Ficus', type: 'water', done: false, time: '09:00' },
+  ],
+  2: [ // Mardi
+    { id: 'd2t1', plantId: '1', plantName: 'Monstera', type: 'observe', done: false, time: '10:00' },
+    { id: 'd2t2', plantId: '4', plantName: 'Cactus', type: 'observe', done: false, time: '10:00' },
+    { id: 'd2t3', plantId: '2', plantName: 'Pothos', type: 'observe', done: false, time: '14:00' },
+  ],
+  3: [ // Mercredi
+    { id: 'd3t1', plantId: '1', plantName: 'Monstera', type: 'water', done: false, time: '08:00' },
+    { id: 'd3t2', plantId: '2', plantName: 'Pothos', type: 'water', done: false, time: '08:00' },
+    { id: 'd3t3', plantId: '3', plantName: 'Ficus', type: 'observe', done: false, time: '12:00' },
+    { id: 'd3t4', plantId: '4', plantName: 'Cactus', type: 'water', done: false, time: '16:00' },
+  ],
+  4: [ // Jeudi
+    { id: 'd4t1', plantId: '3', plantName: 'Ficus', type: 'water', done: false, time: '08:00' },
+    { id: 'd4t2', plantId: '1', plantName: 'Monstera', type: 'observe', done: false, time: '11:00' },
+  ],
+  5: [ // Vendredi
+    { id: 'd5t1', plantId: '4', plantName: 'Cactus', type: 'water', done: false, time: '09:00' },
+    { id: 'd5t2', plantId: '2', plantName: 'Pothos', type: 'water', done: false, time: '09:00' },
+    { id: 'd5t3', plantId: '1', plantName: 'Monstera', type: 'water', done: false, time: '09:00' },
+    { id: 'd5t4', plantId: '3', plantName: 'Ficus', type: 'observe', done: false, time: '15:00' },
+  ],
+  6: [ // Samedi
+    { id: 'd6t1', plantId: '2', plantName: 'Pothos', type: 'observe', done: false, time: '10:00' },
+    { id: 'd6t2', plantId: '1', plantName: 'Monstera', type: 'observe', done: false, time: '10:00' },
+  ],
+};
