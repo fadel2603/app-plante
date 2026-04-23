@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   Animated,
   PanResponder,
@@ -12,233 +11,335 @@ import {
   Platform,
   KeyboardAvoidingView,
   Dimensions,
-  Easing,
+  StatusBar,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Sparkles } from 'lucide-react-native';
-import { Colors } from '@/constants/colors';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Text as SvgText } from 'react-native-svg';
 import { FontFamily } from '@/constants/fonts';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { height: SCREEN_H } = Dimensions.get('window');
-const SHEET_H = SCREEN_H * 0.9;
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const DISMISS_THRESHOLD = 80;
+const GLOW_DURATION = 2400;
+const GLOW_STAGGER = 600;
 
-type Message = { id: string; role: 'user' | 'ai'; text: string };
-
-const ACTIONS = [
-  { icon: 'camera' as const, label: 'Scanner' },
-  { icon: 'mic' as const, label: 'Vocal' },
-  { icon: 'images' as const, label: 'Galerie' },
-];
-
+type Mode = 'voice' | 'keyboard' | 'camera' | 'photo';
 type Props = { visible: boolean; onClose: () => void };
 
+// ── Gradient title via SVG ──────────────────────────────────────────────────
+function GradientTitle() {
+  const w = SCREEN_W - 64;
+  const fontSize = 36;
+  const lineH = fontSize * 1.22;
+  const totalH = lineH * 2 + 4;
+  return (
+    <Svg width={w} height={totalH} style={{ overflow: 'visible' }}>
+      <Defs>
+        <SvgGradient id="shimmer" x1="0%" y1="0%" x2="100%" y2="0%">
+          <Stop offset="0%"   stopColor="#FFFFFF" stopOpacity="1" />
+          <Stop offset="35%"  stopColor="#CCCCCC" stopOpacity="1" />
+          <Stop offset="65%"  stopColor="#CCCCCC" stopOpacity="1" />
+          <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="1" />
+        </SvgGradient>
+      </Defs>
+      <SvgText x={w / 2} y={lineH} textAnchor="middle"
+        fill="url(#shimmer)" fontSize={fontSize} fontFamily="GasoekOne_400Regular">
+        Comment puis-je
+      </SvgText>
+      <SvgText x={w / 2} y={lineH * 2 + 4} textAnchor="middle"
+        fill="url(#shimmer)" fontSize={fontSize} fontFamily="GasoekOne_400Regular">
+        {`t\u2019aider\u00A0?`}
+      </SvgText>
+    </Svg>
+  );
+}
+
+// ── One animated bottom-glow wave layer ────────────────────────────────────
+// Each layer is a gradient anchored at the bottom at a different height;
+// opacity pulses in/out to simulate a wave propagating upward.
+function GlowLayer({
+  opacity,
+  layerHeight,
+  peakColor,
+}: {
+  opacity: Animated.Value;
+  layerHeight: number;
+  peakColor: string;
+}) {
+  return (
+    <Animated.View
+      style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: layerHeight, opacity }}
+      pointerEvents="none"
+    >
+      <LinearGradient
+        colors={['transparent', peakColor]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
+
 export default function AISheet({ visible, onClose }: Props) {
-  const translateY = useRef(new Animated.Value(SHEET_H)).current;
+  const insets = useSafeAreaInsets();
+
+  // Sheet slide-up
+  const translateY = useRef(new Animated.Value(SCREEN_H)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const orbRot = useRef(new Animated.Value(0)).current;
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Bottom-glow wave layers (4 staggered pulses)
+  const glow0 = useRef(new Animated.Value(0)).current;
+  const glow1 = useRef(new Animated.Value(0)).current;
+  const glow2 = useRef(new Animated.Value(0)).current;
+  const glow3 = useRef(new Animated.Value(0)).current;
+  const glows = [glow0, glow1, glow2, glow3];
+
+  const [permission, requestPermission] = useCameraPermissions();
+  const [mode, setMode] = useState<Mode>('voice');
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-  const dot1 = useRef(new Animated.Value(0.3)).current;
-  const dot2 = useRef(new Animated.Value(0.3)).current;
-  const dot3 = useRef(new Animated.Value(0.3)).current;
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const cameraRef = useRef<CameraView>(null);
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(orbRot, { toValue: 1, duration: 15000, useNativeDriver: true })
-    ).start();
-  }, []);
-
+  // Slide-in on open
   useEffect(() => {
     if (visible) {
-      translateY.setValue(SHEET_H);
+      translateY.setValue(SCREEN_H);
       Animated.parallel([
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 180 }),
-        Animated.timing(backdropOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 26,
+          stiffness: 220,
+          mass: 1,
+        }),
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
 
+  // Bottom glow pulse — only animates in voice mode
   useEffect(() => {
-    if (!isTyping) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(dot1, { toValue: 1, duration: 280, useNativeDriver: true }),
-        Animated.timing(dot2, { toValue: 1, duration: 280, useNativeDriver: true }),
-        Animated.timing(dot3, { toValue: 1, duration: 280, useNativeDriver: true }),
-        Animated.timing(dot1, { toValue: 0.3, duration: 280, useNativeDriver: true }),
-        Animated.timing(dot2, { toValue: 0.3, duration: 280, useNativeDriver: true }),
-        Animated.timing(dot3, { toValue: 0.3, duration: 280, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isTyping]);
+    const loops: Animated.CompositeAnimation[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    if (mode === 'voice') {
+      glows.forEach((g, i) => {
+        g.setValue(0);
+        const t = setTimeout(() => {
+          const loop = Animated.loop(
+            Animated.sequence([
+              Animated.timing(g, {
+                toValue: 1,
+                duration: GLOW_DURATION * 0.55,
+                useNativeDriver: true,
+              }),
+              Animated.timing(g, {
+                toValue: 0,
+                duration: GLOW_DURATION * 0.45,
+                useNativeDriver: true,
+              }),
+            ])
+          );
+          loops.push(loop);
+          loop.start();
+        }, i * GLOW_STAGGER);
+        timers.push(t);
+      });
+    }
+
+    return () => {
+      timers.forEach(clearTimeout);
+      loops.forEach(l => l.stop());
+    };
+  }, [mode]);
 
   const dismiss = () => {
     Animated.parallel([
-      Animated.timing(translateY, { toValue: SHEET_H, duration: 300, useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: 0, duration: 240, useNativeDriver: true }),
-    ]).start(() => onClose());
+      Animated.timing(translateY, { toValue: SCREEN_H, duration: 340, useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: 0, duration: 260, useNativeDriver: true }),
+    ]).start(() => {
+      setMode('voice');
+      setInput('');
+      setPhotoUri(null);
+      onClose();
+    });
   };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
       onPanResponderMove: (_, g) => { if (g.dy > 0) translateY.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
         if (g.dy > DISMISS_THRESHOLD || g.vy > 0.5) dismiss();
-        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 200 }).start();
+        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 26, stiffness: 220 }).start();
       },
     })
   ).current;
 
-  const send = (text: string) => {
-    if (!text.trim()) return;
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', text: text.trim() };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setIsTyping(true);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    setTimeout(() => {
-      setIsTyping(false);
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: 'ai',
-        text: 'Je vais analyser ça pour vous. Pouvez-vous me donner plus de détails sur votre plante ?',
-      }]);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    }, 1000 + Math.random() * 700);
+  const handleCameraPress = async () => {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) return;
+    }
+    setMode('camera');
   };
 
-  const orbRotDeg = orbRot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const isEmpty = messages.length === 0;
+  const handleCapture = async () => {
+    if (!cameraRef.current) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      if (photo?.uri) {
+        setPhotoUri(photo.uri);
+        setMode('photo');
+      }
+    } catch {}
+  };
 
   if (!visible) return null;
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={dismiss}>
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={dismiss} activeOpacity={1} />
-      </Animated.View>
+    <Modal visible transparent animationType="none" onRequestClose={dismiss} statusBarTranslucent>
+      <StatusBar barStyle="light-content" />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.kavWrapper}
-        pointerEvents="box-none"
-      >
-        <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
-          {/* Background gradient: black top → blue bottom */}
+      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} pointerEvents="none" />
+
+      <Animated.View style={[styles.root, { transform: [{ translateY }] }]}>
+        {/* Pure black base */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000000' }]} />
+
+        {/* Base static glow (always visible) */}
+        <View style={styles.baseGlow} pointerEvents="none">
           <LinearGradient
-            colors={['#000000', '#000000', '#0a1a3d', '#1a3a6b', '#2563eb', '#3b82f6']}
-            locations={[0, 0.35, 0.52, 0.68, 0.84, 1]}
-            style={StyleSheet.absoluteFill}
+            colors={['transparent', 'rgba(181,241,91,0.06)', 'rgba(181,241,91,0.18)']}
+            locations={[0, 0.55, 1]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFill}
           />
+        </View>
 
-          {/* Handle + close */}
-          <View {...panResponder.panHandlers} style={styles.dragZone}>
-            <View style={styles.handle} />
-          </View>
-          <TouchableOpacity style={styles.closeBtn} onPress={dismiss}>
-            <Ionicons name="close" size={17} color="rgba(255,255,255,0.45)" />
-          </TouchableOpacity>
+        {/* Animated pulse wave layers — staggered, different heights */}
+        <GlowLayer opacity={glow0} layerHeight={SCREEN_H * 0.38} peakColor="rgba(181,241,91,0.32)" />
+        <GlowLayer opacity={glow1} layerHeight={SCREEN_H * 0.50} peakColor="rgba(181,241,91,0.24)" />
+        <GlowLayer opacity={glow2} layerHeight={SCREEN_H * 0.62} peakColor="rgba(181,241,91,0.18)" />
+        <GlowLayer opacity={glow3} layerHeight={SCREEN_H * 0.72} peakColor="rgba(181,241,91,0.12)" />
 
-          {/* ── WELCOME ── */}
-          {isEmpty && (
-            <View style={styles.welcomeArea}>
-              {/* Orb */}
-              <View style={styles.siriOrb}>
-                <Animated.View style={[styles.siriGrad, { transform: [{ rotate: orbRotDeg }] }]}>
-                  <LinearGradient
-                    colors={['#60a5fa', '#2563eb', '#000000', '#3b82f6']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                </Animated.View>
-                <View style={styles.siriOverlay}>
-                  <Sparkles size={22} color="#fff" strokeWidth={1.5} />
-                </View>
-              </View>
-
-              <Text style={styles.welcomeTitle}>Comment puis-je{'\n'}t'aider ?</Text>
-              <Text style={styles.welcomeSub}>Pose n'importe quelle question{'\n'}sur tes plantes</Text>
-
-              <View style={styles.actionsRow}>
-                {ACTIONS.map(a => (
-                  <TouchableOpacity key={a.label} style={styles.actionBtn} activeOpacity={0.7}>
-                    <Ionicons name={a.icon} size={20} color="rgba(255,255,255,0.85)" />
-                    <Text style={styles.actionLabel}>{a.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* ── CHAT ── */}
-          {!isEmpty && (
-            <ScrollView
-              ref={scrollRef}
-              style={styles.messages}
-              contentContainerStyle={styles.messagesContent}
-              showsVerticalScrollIndicator={false}
+        {/* ── CAMERA STATE ── */}
+        {mode === 'camera' && (
+          <View style={StyleSheet.absoluteFill}>
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+            <TouchableOpacity
+              style={[styles.closeBtn, { top: insets.top + 12 }]}
+              onPress={() => setMode('voice')}
+              activeOpacity={0.8}
             >
-              {messages.map(msg => (
-                <View key={msg.id} style={[styles.bubble, msg.role === 'user' ? styles.bubbleUser : styles.bubbleAI]}>
-                  {msg.role === 'ai' && (
-                    <View style={styles.aiDot}>
-                      <Sparkles size={10} color="#60a5fa" strokeWidth={2} />
-                    </View>
-                  )}
-                  <Text style={[styles.bubbleText, msg.role === 'user' && styles.bubbleTextUser]}>
-                    {msg.text}
-                  </Text>
+              <Ionicons name="close" size={18} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+            <View style={[styles.cameraBottom, { paddingBottom: insets.bottom + 36 }]}>
+              <TouchableOpacity onPress={handleCapture} activeOpacity={0.85}>
+                <View style={styles.captureBtnRing}>
+                  <View style={styles.captureBtnCore} />
                 </View>
-              ))}
-              {isTyping && (
-                <View style={[styles.bubble, styles.bubbleAI]}>
-                  <View style={styles.aiDot}>
-                    <Sparkles size={10} color="#60a5fa" strokeWidth={2} />
-                  </View>
-                  <View style={styles.typingDots}>
-                    {[dot1, dot2, dot3].map((d, i) => (
-                      <Animated.View key={i} style={[styles.dot, { opacity: d }]} />
-                    ))}
-                  </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ── VOICE / KEYBOARD / PHOTO STATES ── */}
+        {mode !== 'camera' && (
+          <>
+            {/* Photo background */}
+            {mode === 'photo' && photoUri && (
+              <>
+                <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                <View style={[StyleSheet.absoluteFill, styles.photoDim]} />
+              </>
+            )}
+
+            {/* Drag handle */}
+            <View {...panResponder.panHandlers} style={styles.dragZone}>
+              <View style={styles.handle} />
+            </View>
+
+            {/* Close */}
+            <TouchableOpacity
+              style={[styles.closeBtn, { top: insets.top + 8 }]}
+              onPress={dismiss}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="close" size={18} color="rgba(255,255,255,0.6)" />
+            </TouchableOpacity>
+
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={styles.kav}
+            >
+              {/* ── WELCOME TEXT (replaces orb) ── */}
+              <View style={styles.heroArea}>
+                <Text style={styles.greeting}>
+                  {mode === 'photo' ? 'À propos de cette plante' : 'Bonjour Fadel'}
+                </Text>
+                <GradientTitle />
+              </View>
+
+              {/* Status text */}
+              <Text style={styles.statusText}>
+                {mode === 'voice'
+                  ? 'Vous pouvez commencer à parler'
+                  : mode === 'photo'
+                  ? 'Posez votre question ci-dessous'
+                  : ''}
+              </Text>
+
+              {/* Text input — keyboard + photo modes */}
+              {(mode === 'keyboard' || mode === 'photo') && (
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.inputField}
+                    value={input}
+                    onChangeText={setInput}
+                    placeholder="Une question ?"
+                    placeholderTextColor="rgba(255,255,255,0.38)"
+                    multiline
+                    autoFocus={mode === 'keyboard'}
+                    selectionColor="#B5F15B"
+                  />
+                  {input.trim() ? (
+                    <TouchableOpacity style={styles.sendBtn} activeOpacity={0.8}>
+                      <Ionicons name="arrow-up" size={16} color="#000" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               )}
-            </ScrollView>
-          )}
 
-          {/* Input */}
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              value={input}
-              onChangeText={setInput}
-              placeholder="Pose ta question..."
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              multiline
-              selectionColor="#3b82f6"
-            />
-            <TouchableOpacity activeOpacity={0.7}>
-              <Ionicons name="mic" size={20} color="rgba(255,255,255,0.35)" />
-            </TouchableOpacity>
-            {input.trim() ? (
-              <TouchableOpacity style={styles.sendBtn} onPress={() => send(input)} activeOpacity={0.8}>
-                <Ionicons name="arrow-up" size={15} color="#fff" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
+              {/* Bottom action buttons */}
+              <View style={[styles.bottomActions, { paddingBottom: insets.bottom + 28 }]}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, mode === 'keyboard' && styles.actionBtnActive]}
+                  onPress={() => setMode(mode === 'keyboard' ? 'voice' : 'keyboard')}
+                  activeOpacity={0.75}
+                >
+                  {/* QWERTY laptop-style keyboard icon */}
+                  <Ionicons name="keyboard-outline" size={26} color="#ffffff" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, mode === 'photo' && styles.actionBtnActive]}
+                  onPress={handleCameraPress}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="camera-outline" size={26} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </>
+        )}
+      </Animated.View>
     </Modal>
   );
 }
@@ -246,169 +347,158 @@ export default function AISheet({ visible, onClose }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  kavWrapper: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    pointerEvents: 'box-none',
-  },
-  sheet: {
-    height: SHEET_H,
-    borderTopLeftRadius: 44,
-    borderTopRightRadius: 44,
+  root: {
+    position: 'absolute',
+    inset: 0,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     overflow: 'hidden',
   },
 
+  /* Base glow (always on) */
+  baseGlow: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN_H * 0.45,
+  },
+
+  /* Drag handle */
   dragZone: {
     alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   handle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 5,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
+
+  /* Close button */
   closeBtn: {
     position: 'absolute',
-    top: 16, right: 20,
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  /* Welcome */
-  welcomeArea: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
-  siriOrb: {
-    width: 90, height: 90, borderRadius: 45,
-    overflow: 'hidden',
-    marginBottom: 24,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  siriGrad: {
-    position: 'absolute',
-    width: 140, height: 140,
-    top: -25, left: -25,
-  },
-  siriOverlay: {
-    position: 'absolute',
-    width: 90, height: 90, borderRadius: 45,
-    backgroundColor: 'rgba(0,0,20,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  welcomeTitle: {
-    fontFamily: FontFamily.titleDisplay,
-    fontSize: 28,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    lineHeight: 36,
-    marginBottom: 8,
-  },
-  welcomeSub: {
-    fontFamily: FontFamily.bodyRegular,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 32,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
+    left: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.09)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    height: 46,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.13)',
-  },
-  actionLabel: {
-    fontFamily: FontFamily.calendarMedium,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
+    zIndex: 10,
   },
 
-  /* Chat */
-  messages: { flex: 1, paddingHorizontal: 16 },
-  messagesContent: { gap: 10, paddingVertical: 16 },
-  bubble: {
-    maxWidth: '85%',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  bubbleUser: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#2563eb',
-    borderBottomRightRadius: 6,
-  },
-  bubbleAI: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.11)',
-    borderBottomLeftRadius: 6,
-  },
-  aiDot: {
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: 'rgba(96,165,250,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: 1, flexShrink: 0,
-  },
-  bubbleText: {
-    fontFamily: FontFamily.calendarMedium,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.88)',
-    flex: 1, lineHeight: 20,
-  },
-  bubbleTextUser: { color: '#ffffff' },
-  typingDots: { flexDirection: 'row', gap: 5, alignItems: 'center', height: 20 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
+  kav: { flex: 1 },
 
-  /* Input */
+  /* Hero text area (replaces orb) */
+  heroArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 14,
+  },
+  greeting: {
+    fontFamily: FontFamily.bodyRegular,
+    fontSize: 17,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+  },
+
+  /* Status text — more prominent */
+  statusText: {
+    fontFamily: FontFamily.calendarMedium,
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 32,
+  },
+
+  /* Text input */
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginHorizontal: 14,
-    marginBottom: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 28,
-    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: 'rgba(181,241,91,0.10)',
+    borderRadius: 100,
+    paddingLeft: 22,
+    paddingRight: 10,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(181,241,91,0.22)',
   },
-  input: {
+  inputField: {
     flex: 1,
     fontFamily: FontFamily.calendarMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.9)',
     maxHeight: 80,
     paddingTop: 0,
+    paddingRight: 8,
   },
   sendBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: '#2563eb',
-    alignItems: 'center', justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#B5F15B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /* Bottom action buttons — 72px */
+  bottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    paddingTop: 8,
+  },
+  actionBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnActive: {
+    backgroundColor: 'rgba(181,241,91,0.18)',
+    borderColor: 'rgba(181,241,91,0.4)',
+  },
+
+  /* Photo dim */
+  photoDim: {
+    backgroundColor: 'rgba(0,0,0,0.52)',
+  },
+
+  /* Camera */
+  cameraBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  captureBtnRing: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureBtnCore: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#ffffff',
   },
 });

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -41,6 +42,7 @@ function getTasksForDate(date: Date): Task[] {
 }
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(today);
   const [tasks, setTasks] = useState<Task[]>(getTasksForDate(today));
@@ -127,7 +129,7 @@ export default function HomeScreen() {
 
       <Animated.ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -243,7 +245,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 60 },
+  content: { paddingHorizontal: 20 },
 
   topGradient: {
     position: 'absolute',

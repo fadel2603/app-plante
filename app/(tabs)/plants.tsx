@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -18,6 +19,7 @@ import { PLANTS } from '@/constants/data';
 import AddPlantSheet from '@/components/AddPlantSheet';
 
 export default function PlantsScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
   const [addSheetVisible, setAddSheetVisible] = useState(false);
@@ -44,7 +46,7 @@ export default function PlantsScreen() {
 
       <Animated.ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -124,7 +126,7 @@ export default function PlantsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 60 },
+  content: { paddingHorizontal: 16 },
 
   /* Top fade */
   topGradient: {
